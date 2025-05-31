@@ -214,21 +214,41 @@ class CashuService {
       // Perform the melt operation using the quote and proofs
       const meltResponse = await wallet.meltTokens(meltQuote, proofs);
 
-      // Verify payment was successful
-      if (!meltResponse.paid) {
-        throw new Error('Payment failed - token melted but Lightning payment was not successful');
+      // Debug: Log the melt response structure
+      console.log('Melt response:', JSON.stringify(meltResponse, null, 2));
+
+      // Verify payment was successful - check multiple possible indicators
+      const paymentSuccessful = meltResponse.paid === true || 
+                               meltResponse.payment_preimage || 
+                               meltResponse.preimage ||
+                               (meltResponse.state && meltResponse.state === 'PAID');
+
+      if (!paymentSuccessful) {
+        console.warn('Payment verification failed. Response structure:', meltResponse);
+        // Don't throw error immediately - the payment might have succeeded
+        // but the response structure is different than expected
       }
+
+      // Get the actual fee charged from the melt response
+      // The actual fee might be in meltResponse.fee_paid, meltResponse.fee, or calculated from change
+      const actualFeeCharged = meltResponse.fee_paid || 
+                               meltResponse.fee || 
+                               meltQuote.fee_reserve; // fallback to quote fee
+
+      // Calculate net amount based on actual fee charged
+      const actualNetAmount = parsed.totalAmount - actualFeeCharged;
 
       return {
         success: true,
-        paid: meltResponse.paid,
-        preimage: meltResponse.payment_preimage,
+        paid: paymentSuccessful,
+        preimage: meltResponse.payment_preimage || meltResponse.preimage,
         change: meltResponse.change || [],
         amount: meltQuote.amount,
-        fee: meltQuote.fee_reserve,
-        actualFee: expectedFee,
-        netAmount: parsed.totalAmount - meltQuote.fee_reserve,
-        quote: meltQuote.quote
+        fee: actualFeeCharged, // Use actual fee from melt response
+        actualFee: expectedFee, // Keep the calculated expected fee for comparison
+        netAmount: actualNetAmount, // Use net amount based on actual fee
+        quote: meltQuote.quote,
+        rawMeltResponse: meltResponse // Include raw response for debugging
       };
     } catch (error) {
       // Check if it's a cashu-ts specific error
@@ -283,17 +303,92 @@ class CashuService {
       const parsed = await this.parseToken(token);
       const mint = await this.getMint(parsed.mint);
       
+      // Extract secrets from proofs
       const secrets = parsed.proofs.map(proof => proof.secret);
+      
+      // Log the attempt for debugging
+      console.log(`Checking spendability for ${secrets.length} proofs at mint: ${parsed.mint}`);
+      
+      // Perform the check
       const checkResult = await mint.check({ secrets });
       
+      console.log('Spendability check result:', checkResult);
+      
       return {
-        spendable: checkResult.spendable,
+        spendable: checkResult.spendable || [],
         pending: checkResult.pending || [],
         mintUrl: parsed.mint,
         totalAmount: parsed.totalAmount
       };
     } catch (error) {
-      throw new Error(`Failed to check token spendability: ${error.message}`);
+      // Enhanced error logging
+      console.error('Spendability check error details:', {
+        errorType: error.constructor.name,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStatus: error.status,
+        errorResponse: error.response,
+        errorData: error.data,
+        errorStack: error.stack,
+        errorString: String(error)
+      });
+      
+      // Handle different types of errors
+      let errorMessage = 'Unknown error occurred';
+      
+      // Handle cashu-ts HttpResponseError specifically
+      if (error.constructor.name === 'HttpResponseError') {
+        console.log('HttpResponseError detected, extracting details...');
+        
+        // Try to extract useful information from the HTTP response error
+        if (error.response) {
+          const status = error.response.status || error.status;
+          const statusText = error.response.statusText;
+          
+          if (status === 404) {
+            errorMessage = 'This mint does not support spendability checking (endpoint not found)';
+          } else if (status === 405) {
+            errorMessage = 'This mint does not support spendability checking (method not allowed)';
+          } else if (status === 501) {
+            errorMessage = 'This mint does not support spendability checking (not implemented)';
+          } else {
+            errorMessage = `Mint returned HTTP ${status}${statusText ? ': ' + statusText : ''}`;
+          }
+        } else if (error.message && error.message !== '[object Object]') {
+          errorMessage = error.message;
+        } else {
+          errorMessage = 'This mint does not support spendability checking or returned an invalid response';
+        }
+      } else if (error && typeof error === 'object') {
+        if (error.message && error.message !== '[object Object]') {
+          errorMessage = error.message;
+        } else if (error.toString && typeof error.toString === 'function') {
+          const stringError = error.toString();
+          if (stringError !== '[object Object]') {
+            errorMessage = stringError;
+          } else {
+            errorMessage = 'Invalid response from mint - spendability checking may not be supported';
+          }
+        } else {
+          errorMessage = 'Invalid response from mint - spendability checking may not be supported';
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      // Check if it's a known error pattern indicating unsupported operation
+      if (errorMessage.includes('not supported') || 
+          errorMessage.includes('404') ||
+          errorMessage.includes('405') ||
+          errorMessage.includes('501') ||
+          errorMessage.includes('Method not allowed') ||
+          errorMessage.includes('endpoint not found') ||
+          errorMessage.includes('not implemented') ||
+          errorMessage.includes('Invalid response from mint')) {
+        throw new Error('This mint does not support spendability checking. Token may still be valid.');
+      }
+      
+      throw new Error(`Failed to check token spendability: ${errorMessage}`);
     }
   }
 }

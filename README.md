@@ -78,6 +78,7 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
   "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
+  "invoiceAmount": 20580,
   "to": "user@ln.tips",
   "fee": 1000,
   "actualFee": 420,
@@ -95,6 +96,7 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
   "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
+  "invoiceAmount": 20580,
   "to": "admin@your-domain.com",
   "fee": 1000,
   "actualFee": 420,
@@ -106,51 +108,24 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 }
 ```
 
-### 3. `POST /api/status`
-Check redemption status using redeemId.
+**Important Note on Fees**: 
+- Fees are calculated according to NUT-05 (2% of token amount, minimum 1 satoshi)
+- **Fees are subtracted from the token amount before creating the Lightning invoice**
+- `amount`: Original token amount
+- `invoiceAmount`: Actual amount sent to Lightning address (amount - expected fees)
+- `fee`: Actual fee charged by the mint
+- `actualFee`: Calculated expected fee
+- `netAmount`: Final amount after all deductions
 
-**Request:**
-```json
-{
-  "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762"
-}
-```
+**Payment Verification**: 
+The API uses multiple indicators to verify payment success:
+- `paid` flag from mint response
+- Presence of payment preimage
+- Payment state indicators
 
-**Response:**
-```json
-{
-  "success": true,
-  "status": "paid",
-  "details": {
-    "amount": 21000,
-    "to": "user@ln.tips",
-    "paid": true,
-    "paidAt": "2025-01-14T12:00:00Z",
-    "fee": 1000,
-    "createdAt": "2025-01-14T11:59:30Z",
-    "updatedAt": "2025-01-14T12:00:00Z"
-  }
-}
-```
+If you receive a "payment failed" error but the Lightning payment was successful, use the debug endpoint to investigate the raw mint response.
 
-### 4. `GET /api/status/:redeemId`
-Same as above, but via URL parameter for frontend polling.
-
-### 5. `GET /api/health`
-Health check endpoint.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-14T12:00:00Z",
-  "uptime": 3600,
-  "memory": {...},
-  "version": "1.0.0"
-}
-```
-
-### 6. `POST /api/validate-address`
+### 3. `POST /api/validate-address`
 Validate a Lightning address without redemption.
 
 **Request:**
@@ -172,25 +147,7 @@ Validate a Lightning address without redemption.
 }
 ```
 
-### 7. `GET /api/stats`
-Get redemption statistics (admin endpoint).
-
-**Response:**
-```json
-{
-  "success": true,
-  "stats": {
-    "total": 150,
-    "paid": 142,
-    "failed": 8,
-    "processing": 0,
-    "totalAmount": 2500000,
-    "totalFees": 15000
-  }
-}
-```
-
-### 8. `POST /api/check-spendable`
+### 4. `POST /api/check-spendable`
 Check if a Cashu token is spendable at its mint before attempting redemption.
 
 **Request:**
@@ -200,7 +157,7 @@ Check if a Cashu token is spendable at its mint before attempting redemption.
 }
 ```
 
-**Response:**
+**Success Response:**
 ```json
 {
   "success": true,
@@ -208,9 +165,37 @@ Check if a Cashu token is spendable at its mint before attempting redemption.
   "pending": [],
   "mintUrl": "https://mint.azzamo.net",
   "totalAmount": 21000,
-  "message": "Token is spendable"
+  "spendableCount": 2,
+  "totalProofs": 3,
+  "message": "2 of 3 token proofs are spendable"
 }
 ```
+
+**Response (when mint doesn't support spendability checking):**
+```json
+{
+  "success": true,
+  "supported": false,
+  "message": "This mint does not support spendability checking. Token format appears valid.",
+  "error": "This mint does not support spendability checking. Token may still be valid."
+}
+```
+
+**Fallback Response (when spendability check fails but token is valid):**
+```json
+{
+  "success": true,
+  "supported": false,
+  "fallback": true,
+  "mintUrl": "https://21mint.me",
+  "totalAmount": 21000,
+  "totalProofs": 8,
+  "message": "Spendability check failed, but token format is valid. Token may still be usable.",
+  "error": "Failed to check token spendability: [error details]"
+}
+```
+
+**Note**: Some mints may not support spendability checking. In such cases, the endpoint will return `supported: false` with a success status, indicating that while the check couldn't be performed, the token format itself appears valid.
 
 ## 🛠 Setup & Installation
 
@@ -314,7 +299,7 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 - Coordinates the complete redemption process
 - Manages redemption status tracking
 - Handles duplicate token detection
-- Provides statistics and cleanup
+- Provides cleanup functionality
 
 ### Data Flow
 
@@ -343,137 +328,8 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 | `melting_token` | Performing the melt operation |
 | `paid` | Successfully paid and completed |
 | `failed` | Redemption failed (see error details) |
-| `checking_spendability` | Verifying token is spendable at mint |
 
 ## 📊 Monitoring
 
 ### Health Check
-```bash
-curl http://localhost:3000/api/health
 ```
-
-### Statistics
-```bash
-curl http://localhost:3000/api/stats
-```
-
-### Logs
-The server logs all requests and errors to console. In production, consider using a proper logging solution like Winston.
-
-## 🧪 Testing
-
-### Interactive Testing with Swagger
-
-The easiest way to test the API is using the interactive Swagger documentation at `/docs`:
-- Visit `http://localhost:3000/docs` 
-- Click "Try it out" on any endpoint
-- Fill in the request parameters
-- Execute the request directly from the browser
-
-### Example cURL commands
-
-**Decode a token:**
-```bash
-curl -X POST http://localhost:3000/api/decode \
-  -H "Content-Type: application/json" \
-  -d '{"token":"your-cashu-token-here"}'
-```
-
-**Check if token is spendable:**
-```bash
-curl -X POST http://localhost:3000/api/check-spendable \
-  -H "Content-Type: application/json" \
-  -d '{"token":"your-cashu-token-here"}'
-```
-
-**Redeem a token to specific address:**
-```bash
-curl -X POST http://localhost:3000/api/redeem \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "your-cashu-token-here",
-    "lightningAddress": "user@ln.tips"
-  }'
-```
-
-**Redeem a token to default address:**
-```bash
-curl -X POST http://localhost:3000/api/redeem \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "your-cashu-token-here"
-  }'
-```
-
-**Check status:**
-```bash
-curl -X POST http://localhost:3000/api/status \
-  -H "Content-Type: application/json" \
-  -d '{"redeemId":"your-redeem-id-here"}'
-```
-
-## 🚀 Production Deployment
-
-### Recommendations
-
-1. **Use a process manager** (PM2, systemd)
-2. **Set up reverse proxy** (nginx, Apache)
-3. **Enable HTTPS** with SSL certificates
-4. **Use Redis** for persistent storage instead of in-memory
-5. **Set up monitoring** (Prometheus, Grafana)
-6. **Configure logging** (Winston, structured logs)
-7. **Set resource limits** and health checks
-
-### Docker Deployment
-
-Create a `Dockerfile`:
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-### Environment-specific configs
-
-**Production `.env`:**
-```bash
-NODE_ENV=production
-PORT=3000
-ALLOW_REDEEM_DOMAINS=ln.tips,getalby.com
-DEFAULT_LIGHTNING_ADDRESS=admin@your-domain.com
-RATE_LIMIT=200
-ALLOWED_ORIGINS=https://yourdomain.com
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📝 License
-
-MIT License - see LICENSE file for details.
-
-## 🆘 Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check the logs for detailed error messages
-- Verify your environment configuration
-- Test with the health endpoint first
-
-## 🔮 Roadmap
-
-- [ ] Add Redis/database persistence
-- [ ] Implement webhook notifications
-- [ ] Add batch redemption support
-- [ ] Enhanced monitoring and metrics
-- [ ] WebSocket real-time status updates
-- [ ] Multi-mint support optimization

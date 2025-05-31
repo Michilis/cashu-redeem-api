@@ -52,7 +52,7 @@ const options = {
             token: {
               type: 'string',
               description: 'Cashu token to decode (supports v1 and v3 formats)',
-              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
+              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
             }
           }
         },
@@ -115,7 +115,7 @@ const options = {
             token: {
               type: 'string',
               description: 'Cashu token to redeem',
-              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
+              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
             },
             lightningAddress: {
               type: 'string',
@@ -148,6 +148,11 @@ const options = {
               type: 'integer',
               description: 'Total amount redeemed in satoshis',
               example: 21000
+            },
+            invoiceAmount: {
+              type: 'integer',
+              description: 'Actual amount sent in Lightning invoice (after subtracting fees)',
+              example: 20580
             },
             to: {
               type: 'string',
@@ -186,14 +191,6 @@ const options = {
               description: 'Lightning payment preimage (if available)',
               example: 'abc123def456...'
             },
-            change: {
-              type: 'array',
-              description: 'Change proofs returned (if any)',
-              items: {
-                type: 'object'
-              },
-              example: []
-            },
             usingDefaultAddress: {
               type: 'boolean',
               description: 'Whether default Lightning address was used',
@@ -203,171 +200,6 @@ const options = {
               type: 'string',
               description: 'Additional message (when using default address)',
               example: 'Redeemed to default Lightning address: admin@example.com'
-            }
-          }
-        },
-        
-        // Status Schemas
-        StatusRequest: {
-          type: 'object',
-          required: ['redeemId'],
-          properties: {
-            redeemId: {
-              type: 'string',
-              format: 'uuid',
-              description: 'Redemption ID to check status for',
-              example: '8e99101e-d034-4d2e-9ccf-dfda24d26762'
-            }
-          }
-        },
-        
-        StatusResponse: {
-          type: 'object',
-          properties: {
-            success: {
-              type: 'boolean',
-              example: true
-            },
-            status: {
-              type: 'string',
-              enum: ['processing', 'parsing_token', 'checking_spendability', 'resolving_invoice', 'melting_token', 'paid', 'failed'],
-              description: 'Current redemption status',
-              example: 'paid'
-            },
-            details: {
-              type: 'object',
-              properties: {
-                amount: {
-                  type: 'integer',
-                  description: 'Amount in satoshis',
-                  example: 21000
-                },
-                to: {
-                  type: 'string',
-                  description: 'Lightning address',
-                  example: 'user@ln.tips'
-                },
-                paid: {
-                  type: 'boolean',
-                  example: true
-                },
-                createdAt: {
-                  type: 'string',
-                  format: 'date-time',
-                  example: '2025-01-14T11:59:30Z'
-                },
-                updatedAt: {
-                  type: 'string',
-                  format: 'date-time',
-                  example: '2025-01-14T12:00:00Z'
-                },
-                paidAt: {
-                  type: 'string',
-                  format: 'date-time',
-                  example: '2025-01-14T12:00:00Z'
-                },
-                fee: {
-                  type: 'integer',
-                  description: 'Fee charged in satoshis',
-                  example: 1000
-                },
-                error: {
-                  type: 'string',
-                  description: 'Error message if failed',
-                  example: null
-                },
-                mint: {
-                  type: 'string',
-                  format: 'uri',
-                  description: 'Mint URL',
-                  example: 'https://mint.azzamo.net'
-                },
-                domain: {
-                  type: 'string',
-                  description: 'Lightning address domain',
-                  example: 'ln.tips'
-                }
-              }
-            }
-          }
-        },
-        
-        // Health Schema
-        HealthResponse: {
-          type: 'object',
-          properties: {
-            status: {
-              type: 'string',
-              example: 'ok'
-            },
-            timestamp: {
-              type: 'string',
-              format: 'date-time',
-              example: '2025-01-14T12:00:00Z'
-            },
-            uptime: {
-              type: 'number',
-              description: 'Server uptime in seconds',
-              example: 3600
-            },
-            memory: {
-              type: 'object',
-              description: 'Memory usage information',
-              example: {
-                "rss": 45678912,
-                "heapTotal": 12345678,
-                "heapUsed": 8765432
-              }
-            },
-            version: {
-              type: 'string',
-              example: '1.0.0'
-            }
-          }
-        },
-        
-        // Stats Schema
-        StatsResponse: {
-          type: 'object',
-          properties: {
-            success: {
-              type: 'boolean',
-              example: true
-            },
-            stats: {
-              type: 'object',
-              properties: {
-                total: {
-                  type: 'integer',
-                  description: 'Total number of redemptions',
-                  example: 150
-                },
-                paid: {
-                  type: 'integer',
-                  description: 'Number of successful redemptions',
-                  example: 142
-                },
-                failed: {
-                  type: 'integer',
-                  description: 'Number of failed redemptions',
-                  example: 8
-                },
-                processing: {
-                  type: 'integer',
-                  description: 'Number of currently processing redemptions',
-                  example: 0
-                },
-                totalAmount: {
-                  type: 'integer',
-                  description: 'Total amount redeemed in satoshis',
-                  example: 2500000
-                },
-                totalFees: {
-                  type: 'integer',
-                  description: 'Total fees collected in satoshis',
-                  example: 15000
-                }
-              }
             }
           }
         },
@@ -424,57 +256,16 @@ const options = {
           }
         },
         
-        // Check Spendable Schemas
-        CheckSpendableRequest: {
-          type: 'object',
-          required: ['token'],
-          properties: {
-            token: {
-              type: 'string',
-              description: 'Cashu token to check spendability',
-              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
-            }
-          }
-        },
-        
-        CheckSpendableResponse: {
+        HealthResponse: {
           type: 'object',
           properties: {
-            success: {
-              type: 'boolean',
-              example: true
-            },
-            spendable: {
-              type: 'array',
-              items: {
-                type: 'boolean'
-              },
-              description: 'Array indicating which proofs are spendable',
-              example: [true, true, false]
-            },
-            pending: {
-              type: 'array',
-              items: {
-                type: 'boolean'
-              },
-              description: 'Array indicating which proofs are pending',
-              example: []
-            },
-            mintUrl: {
+            status: {
               type: 'string',
-              format: 'uri',
-              description: 'Mint URL where spendability was checked',
-              example: 'https://mint.azzamo.net'
-            },
-            totalAmount: {
-              type: 'integer',
-              description: 'Total amount of the token in satoshis',
-              example: 21000
+              example: 'OK'
             },
             message: {
               type: 'string',
-              description: 'Human-readable status message',
-              example: 'Token is spendable'
+              example: 'API is healthy'
             }
           }
         }
@@ -536,10 +327,6 @@ const options = {
       {
         name: 'Token Operations',
         description: 'Operations for decoding and redeeming Cashu tokens'
-      },
-      {
-        name: 'Status & Monitoring',
-        description: 'Endpoints for checking redemption status and API health'
       },
       {
         name: 'Validation',

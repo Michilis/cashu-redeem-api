@@ -169,12 +169,21 @@ class RedemptionService {
 
       // Calculate expected fee according to NUT-05
       const expectedFee = cashuService.calculateFee(tokenData.totalAmount);
+      
+      // Calculate net amount after subtracting fees
+      const netAmountAfterFee = tokenData.totalAmount - expectedFee;
+      
+      // Ensure we have enough for the minimum payment after fees
+      if (netAmountAfterFee <= 0) {
+        throw new Error(`Token amount (${tokenData.totalAmount} sats) is insufficient to cover the minimum fee (${expectedFee} sats)`);
+      }
 
       this.updateRedemption(redeemId, { 
         amount: tokenData.totalAmount,
         mint: tokenData.mint,
         numProofs: tokenData.numProofs,
         expectedFee: expectedFee,
+        netAmountAfterFee: netAmountAfterFee,
         format: tokenData.format
       });
 
@@ -191,39 +200,55 @@ class RedemptionService {
       }
 
       // Step 2: Resolve Lightning address to invoice
+      // IMPORTANT: Create invoice for net amount (after subtracting expected fees)
       this.updateRedemption(redeemId, { status: 'resolving_invoice' });
       const invoiceData = await lightningService.resolveInvoice(
         lightningAddressToUse, 
-        tokenData.totalAmount,
-        `Cashu redemption ${redeemId.substring(0, 8)}`
+        netAmountAfterFee, // Use net amount instead of full token amount
+        'Cashu redemption'
       );
 
       this.updateRedemption(redeemId, { 
         bolt11: invoiceData.bolt11.substring(0, 50) + '...',
-        domain: invoiceData.domain
+        domain: invoiceData.domain,
+        invoiceAmount: netAmountAfterFee
       });
 
       // Step 3: Melt the token to pay the invoice
       this.updateRedemption(redeemId, { status: 'melting_token' });
       const meltResult = await cashuService.meltToken(token, invoiceData.bolt11);
 
+      // Log melt result for debugging
+      console.log(`Redemption ${redeemId}: Melt result:`, {
+        paid: meltResult.paid,
+        hasPreimage: !!meltResult.preimage,
+        amount: meltResult.amount,
+        fee: meltResult.fee
+      });
+
+      // Determine if payment was successful
+      // Consider it successful if we have a preimage, even if 'paid' flag is unclear
+      const paymentSuccessful = meltResult.paid || !!meltResult.preimage;
+
       // Step 4: Update final status
       this.updateRedemption(redeemId, {
-        status: meltResult.paid ? 'paid' : 'failed',
-        paid: meltResult.paid,
+        status: paymentSuccessful ? 'paid' : 'failed',
+        paid: paymentSuccessful,
         preimage: meltResult.preimage,
         fee: meltResult.fee,
         actualFee: meltResult.actualFee,
         netAmount: meltResult.netAmount,
         change: meltResult.change,
-        paidAt: meltResult.paid ? new Date().toISOString() : null
+        paidAt: paymentSuccessful ? new Date().toISOString() : null,
+        rawMeltResponse: meltResult.rawMeltResponse // Store for debugging
       });
 
       return {
         success: true,
         redeemId,
-        paid: meltResult.paid,
+        paid: paymentSuccessful,
         amount: tokenData.totalAmount,
+        invoiceAmount: netAmountAfterFee, // Amount actually sent in the invoice
         to: lightningAddressToUse,
         usingDefaultAddress: isUsingDefault,
         fee: meltResult.fee,
@@ -326,27 +351,6 @@ class RedemptionService {
         }
       }
     }
-  }
-
-  /**
-   * Get redemption statistics
-   * @returns {Object} Statistics
-   */
-  getStats() {
-    const redemptions = Array.from(this.redemptions.values());
-    
-    return {
-      total: redemptions.length,
-      paid: redemptions.filter(r => r.paid).length,
-      failed: redemptions.filter(r => r.status === 'failed').length,
-      processing: redemptions.filter(r => r.status === 'processing').length,
-      totalAmount: redemptions
-        .filter(r => r.paid && r.amount)
-        .reduce((sum, r) => sum + r.amount, 0),
-      totalFees: redemptions
-        .filter(r => r.paid && r.fee)
-        .reduce((sum, r) => sum + r.fee, 0)
-    };
   }
 }
 

@@ -157,11 +157,13 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
  *       
  *       The redemption process includes:
  *       1. Token validation and parsing
- *       2. Spendability checking at the mint
- *       3. Lightning address resolution via LNURLp
- *       4. Token melting and Lightning payment
+ *       2. Fee calculation (NUT-05: 2% of amount, minimum 1 satoshi)
+ *       3. Invoice creation for net amount (token amount - fees)
+ *       4. Spendability checking at the mint
+ *       5. Token melting and Lightning payment
  *       
- *       Fee calculation follows NUT-05 specification (2% of amount, minimum 1 satoshi).
+ *       **Important**: Fees are subtracted from the token amount before creating the Lightning invoice.
+ *       The `invoiceAmount` field shows the actual amount sent to the Lightning address.
  *     tags: [Token Operations]
  *     requestBody:
  *       required: true
@@ -206,6 +208,7 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
         redeemId: result.redeemId,
         paid: result.paid,
         amount: result.amount,
+        invoiceAmount: result.invoiceAmount,
         to: result.to,
         fee: result.fee,
         actualFee: result.actualFee,
@@ -223,11 +226,6 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
       // Include preimage if available
       if (result.preimage) {
         response.preimage = result.preimage;
-      }
-
-      // Include change if any
-      if (result.change && result.change.length > 0) {
-        response.change = result.change;
       }
 
       res.json(response);
@@ -249,98 +247,6 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
 
 /**
  * @swagger
- * /api/status:
- *   post:
- *     summary: Check redemption status by redeemId
- *     description: Check the current status of a redemption using its unique ID.
- *     tags: [Status & Monitoring]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/StatusRequest'
- *     responses:
- *       200:
- *         description: Status retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StatusResponse'
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       429:
- *         $ref: '#/components/responses/TooManyRequests'
- */
-app.post('/api/status', asyncHandler(async (req, res) => {
-  const { redeemId } = req.body;
-
-  if (!redeemId) {
-    return res.status(400).json({
-      success: false,
-      error: 'redeemId is required'
-    });
-  }
-
-  const status = redemptionService.getRedemptionStatus(redeemId);
-  
-  if (!status) {
-    return res.status(404).json({
-      success: false,
-      error: 'Redemption not found'
-    });
-  }
-
-  res.json(status);
-}));
-
-/**
- * @swagger
- * /api/status/{redeemId}:
- *   get:
- *     summary: Check redemption status via URL parameter
- *     description: Same as POST /api/status but uses URL parameter - useful for frontend polling.
- *     tags: [Status & Monitoring]
- *     parameters:
- *       - in: path
- *         name: redeemId
- *         required: true
- *         description: Unique redemption ID to check status for
- *         schema:
- *           type: string
- *           format: uuid
- *           example: '8e99101e-d034-4d2e-9ccf-dfda24d26762'
- *     responses:
- *       200:
- *         description: Status retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StatusResponse'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       429:
- *         $ref: '#/components/responses/TooManyRequests'
- */
-app.get('/api/status/:redeemId', asyncHandler(async (req, res) => {
-  const { redeemId } = req.params;
-
-  const status = redemptionService.getRedemptionStatus(redeemId);
-  
-  if (!status) {
-    return res.status(404).json({
-      success: false,
-      error: 'Redemption not found'
-    });
-  }
-
-  res.json(status);
-}));
-
-/**
- * @swagger
  * /api/health:
  *   get:
  *     summary: Health check endpoint
@@ -355,46 +261,28 @@ app.get('/api/status/:redeemId', asyncHandler(async (req, res) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/HealthResponse'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    version: require('./package.json').version
-  });
-});
-
-/**
- * @swagger
- * /api/stats:
- *   get:
- *     summary: Get redemption statistics
- *     description: |
- *       Get comprehensive statistics about redemptions (admin endpoint).
- *       Returns information about total redemptions, success rates, amounts, and fees.
- *       
- *       **Note**: In production, this endpoint should be protected with authentication.
- *     tags: [Status & Monitoring]
- *     responses:
- *       200:
- *         description: Statistics retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StatsResponse'
- *       429:
- *         $ref: '#/components/responses/TooManyRequests'
- */
-app.get('/api/stats', asyncHandler(async (req, res) => {
-  // In production, add authentication here
-  const stats = redemptionService.getStats();
-  
-  res.json({
-    success: true,
-    stats
-  });
+app.get('/api/health', asyncHandler(async (req, res) => {
+  try {
+    const packageJson = require('./package.json');
+    
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: packageJson.version
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: 'Health check failed'
+    });
+  }
 }));
 
 /**
@@ -474,75 +362,6 @@ app.post('/api/validate-address', asyncHandler(async (req, res) => {
     res.status(400).json({
       success: false,
       valid: false,
-      error: error.message
-    });
-  }
-}));
-
-/**
- * @swagger
- * /api/check-spendable:
- *   post:
- *     summary: Check if Cashu token is spendable
- *     description: |
- *       Check if a Cashu token is spendable at its mint before attempting redemption.
- *       This is a pre-validation step that can save time and prevent failed redemptions.
- *       
- *       Returns an array indicating which proofs within the token are spendable,
- *       pending, or already spent.
- *     tags: [Validation]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CheckSpendableRequest'
- *     responses:
- *       200:
- *         description: Spendability check completed
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CheckSpendableResponse'
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       429:
- *         $ref: '#/components/responses/TooManyRequests'
- */
-app.post('/api/check-spendable', asyncHandler(async (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({
-      success: false,
-      error: 'Token is required'
-    });
-  }
-
-  try {
-    // Validate token format first
-    if (!cashuService.isValidTokenFormat(token)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid token format. Must be a valid Cashu token'
-      });
-    }
-
-    const spendabilityCheck = await cashuService.checkTokenSpendable(token);
-    
-    res.json({
-      success: true,
-      spendable: spendabilityCheck.spendable,
-      pending: spendabilityCheck.pending,
-      mintUrl: spendabilityCheck.mintUrl,
-      totalAmount: spendabilityCheck.totalAmount,
-      message: spendabilityCheck.spendable && spendabilityCheck.spendable.length > 0 
-        ? 'Token is spendable' 
-        : 'Token proofs are not spendable - may have already been used'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
       error: error.message
     });
   }

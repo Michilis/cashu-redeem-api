@@ -16,7 +16,7 @@ A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses
 
 **Interactive Swagger Documentation**: Visit `/docs` when running the server for a complete, interactive API reference.
 
-Example: `http://localhost:3000/docs`
+Example: `https://cashu-redeem.azzamo.net/docs/`
 
 The documentation includes:
 - Complete endpoint specifications

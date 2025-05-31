@@ -257,6 +257,15 @@ class CashuService {
           error.message.includes('Quote not found')) {
         throw error; // Re-throw specific cashu errors
       }
+      
+      // Check if it's an already-spent token error
+      if (error.status === 422 || 
+          error.message.includes('already spent') ||
+          error.message.includes('not spendable') ||
+          error.message.includes('invalid proofs')) {
+        throw new Error('This token has already been spent and cannot be redeemed again');
+      }
+      
       throw new Error(`Melt operation failed: ${error.message}`);
     }
   }
@@ -321,43 +330,89 @@ class CashuService {
         totalAmount: parsed.totalAmount
       };
     } catch (error) {
-      // Enhanced error logging
-      console.error('Spendability check error details:', {
-        errorType: error.constructor.name,
-        errorMessage: error.message,
-        errorCode: error.code,
-        errorStatus: error.status,
-        errorResponse: error.response,
-        errorData: error.data,
-        errorStack: error.stack,
-        errorString: String(error)
-      });
+      // Check if it's a known 422 error (already spent token) - log less verbosely
+      const isExpected422Error = (error.status === 422 || error.response?.status === 422) && 
+                                 error.constructor.name === 'HttpResponseError';
+      
+      if (isExpected422Error) {
+        console.log('Token spendability check: 422 status detected - token already spent');
+      } else {
+        // Enhanced error logging for unexpected errors
+        console.error('Spendability check error details:', {
+          errorType: error.constructor.name,
+          errorMessage: error.message,
+          errorCode: error.code,
+          errorStatus: error.status,
+          errorResponse: error.response,
+          errorData: error.data,
+          errorStack: error.stack,
+          errorString: String(error)
+        });
+      }
       
       // Handle different types of errors
       let errorMessage = 'Unknown error occurred';
       
       // Handle cashu-ts HttpResponseError specifically
       if (error.constructor.name === 'HttpResponseError') {
-        console.log('HttpResponseError detected, extracting details...');
+        if (!isExpected422Error) {
+          console.log('HttpResponseError detected, extracting details...');
+        }
         
-        // Try to extract useful information from the HTTP response error
-        if (error.response) {
-          const status = error.response.status || error.status;
-          const statusText = error.response.statusText;
-          
-          if (status === 404) {
-            errorMessage = 'This mint does not support spendability checking (endpoint not found)';
-          } else if (status === 405) {
-            errorMessage = 'This mint does not support spendability checking (method not allowed)';
-          } else if (status === 501) {
-            errorMessage = 'This mint does not support spendability checking (not implemented)';
-          } else {
-            errorMessage = `Mint returned HTTP ${status}${statusText ? ': ' + statusText : ''}`;
+        // Extract status code first
+        const status = error.status || error.response?.status || error.statusCode;
+        
+        // For 422 errors, we know it's about already spent tokens
+        if (status === 422) {
+          errorMessage = 'Token proofs are not spendable - they have already been used or are invalid';
+          if (!isExpected422Error) {
+            console.log('Detected 422 status - token already spent');
           }
-        } else if (error.message && error.message !== '[object Object]') {
-          errorMessage = error.message;
         } else {
-          errorMessage = 'This mint does not support spendability checking or returned an invalid response';
+          // Try to extract useful information from the HTTP response error
+          if (error.response) {
+            const statusText = error.response.statusText;
+            
+            if (status === 404) {
+              errorMessage = 'This mint does not support spendability checking (endpoint not found)';
+            } else if (status === 405) {
+              errorMessage = 'This mint does not support spendability checking (method not allowed)';
+            } else if (status === 501) {
+              errorMessage = 'This mint does not support spendability checking (not implemented)';
+            } else {
+              errorMessage = `Mint returned HTTP ${status}${statusText ? ': ' + statusText : ''}`;
+            }
+          } else if (error.message && error.message !== '[object Object]') {
+            errorMessage = error.message;
+          } else {
+            // Try to extract error details from the error object structure
+            console.log('Attempting to extract error details from object structure...');
+            try {
+              // Check if there's additional error data in the response
+              const errorData = error.data || error.response?.data;
+              if (errorData && typeof errorData === 'string') {
+                errorMessage = errorData;
+              } else if (errorData && errorData.detail) {
+                errorMessage = `Mint error: ${errorData.detail}`;
+              } else if (errorData && errorData.message) {
+                errorMessage = `Mint error: ${errorData.message}`;
+              } else {
+                // Check if we can extract status from anywhere in the error
+                if (status) {
+                  if (status === 422) {
+                    errorMessage = 'Token proofs are not spendable - they have already been used or are invalid';
+                  } else {
+                    errorMessage = `Mint returned HTTP ${status} - spendability checking may not be supported`;
+                  }
+                } else {
+                  errorMessage = 'This mint does not support spendability checking or returned an invalid response';
+                }
+              }
+            } catch (extractError) {
+              console.log('Failed to extract error details:', extractError);
+              errorMessage = 'This mint does not support spendability checking or returned an invalid response';
+            }
+          }
         }
       } else if (error && typeof error === 'object') {
         if (error.message && error.message !== '[object Object]') {
@@ -374,6 +429,11 @@ class CashuService {
         }
       } else if (typeof error === 'string') {
         errorMessage = error;
+      }
+      
+      // Log the final extracted error message for debugging
+      if (!isExpected422Error) {
+        console.log('Final extracted error message:', errorMessage);
       }
       
       // Check if it's a known error pattern indicating unsupported operation

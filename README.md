@@ -7,9 +7,10 @@ A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses
 - **Decode Cashu tokens** - Parse and validate token content
 - **Redeem to Lightning addresses** - Convert ecash to Lightning payments via LNURLp
 - **Security features** - Domain restrictions, rate limiting, input validation
-- **Robust error handling** - Comprehensive error messages and status codes
+- **Robust error handling** - Comprehensive error messages
 - **In-memory caching** - Fast mint and wallet instances with connection pooling
 - **Interactive API Documentation** - Complete Swagger/OpenAPI documentation at `/docs`
+
 
 ## 📖 API Documentation
 
@@ -107,14 +108,6 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 }
 ```
 
-**Important Note on Fees**: 
-- Fees are calculated according to NUT-05 (2% of token amount, minimum 1 satoshi)
-- **Fees are subtracted from the token amount before creating the Lightning invoice**
-- `amount`: Original token amount
-- `invoiceAmount`: Actual amount sent to Lightning address (amount - expected fees)
-- `fee`: Actual fee charged by the mint (from melt response)
-- `actualFee`: Calculated expected fee (for comparison)
-- `netAmount`: Final amount after all deductions
 
 **Payment Verification**: 
 The API uses multiple indicators to verify payment success:
@@ -289,4 +282,73 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 ## 📊 Monitoring
 
 ### Health Check
+
+```bash
+curl http://localhost:3000/api/health
 ```
+
+### Logs
+The server logs all requests and errors to console. In production, consider using a proper logging solution like Winston.
+
+## 🧪 Testing
+
+### Interactive Testing with Swagger
+
+The easiest way to test the API is using the interactive Swagger documentation at `/docs`:
+- Visit `http://localhost:3000/docs` 
+- Click "Try it out" on any endpoint
+- Fill in the request parameters
+- Execute the request directly from the browser
+
+### Example cURL commands
+
+**Decode a token:**
+```bash
+curl -X POST http://localhost:3000/api/decode \
+  -H "Content-Type: application/json" \
+  -d '{"token":"your-cashu-token-here"}'
+```
+
+**Redeem a token to specific address:**
+```bash
+curl -X POST http://localhost:3000/api/redeem \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "your-cashu-token-here",
+    "lightningAddress": "user@ln.tips"
+  }'
+```
+
+**Redeem a token to default address:**
+```bash
+curl -X POST http://localhost:3000/api/redeem \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "your-cashu-token-here"
+  }'
+```
+
+## 🚀 Production Deployment
+
+### Recommendations
+
+1. **Use a process manager** (PM2, systemd)
+2. **Set up reverse proxy** (nginx, Apache)
+3. **Enable HTTPS** with SSL certificates
+4. **Use Redis** for persistent storage instead of in-memory
+5. **Set up monitoring** (Prometheus, Grafana)
+6. **Configure logging** (Winston, structured logs)
+7. **Set resource limits** and health checks
+
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📝 License
+
+MIT License - see LICENSE file for details.

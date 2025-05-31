@@ -180,6 +180,44 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
  *               $ref: '#/components/schemas/RedeemResponse'
  *       400:
  *         $ref: '#/components/responses/BadRequest'
+ *       409:
+ *         description: Token already spent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "This token has already been spent and cannot be redeemed again"
+ *                 redeemId:
+ *                   type: string
+ *                   format: uuid
+ *                 errorType:
+ *                   type: string
+ *                   example: "token_already_spent"
+ *       422:
+ *         description: Insufficient funds or unprocessable token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "Token amount is insufficient to cover the minimum fee"
+ *                 redeemId:
+ *                   type: string
+ *                   format: uuid
+ *                 errorType:
+ *                   type: string
+ *                   example: "insufficient_funds"
  *       429:
  *         $ref: '#/components/responses/TooManyRequests'
  *       500:
@@ -230,10 +268,29 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
 
       res.json(response);
     } else {
-      res.status(400).json({
+      // Determine appropriate status code based on error type
+      let statusCode = 400;
+      
+      if (result.error && (
+        result.error.includes('cannot be redeemed') ||
+        result.error.includes('already been used') ||
+        result.error.includes('not spendable') ||
+        result.error.includes('already spent') ||
+        result.error.includes('invalid proofs')
+      )) {
+        // Use 409 Conflict for already-spent tokens to distinguish from generic bad requests
+        statusCode = 409;
+      } else if (result.error && result.error.includes('insufficient')) {
+        // Use 422 for insufficient funds
+        statusCode = 422;
+      }
+      
+      res.status(statusCode).json({
         success: false,
         error: result.error,
-        redeemId: result.redeemId
+        redeemId: result.redeemId,
+        errorType: statusCode === 409 ? 'token_already_spent' : 
+                   statusCode === 422 ? 'insufficient_funds' : 'validation_error'
       });
     }
   } catch (error) {

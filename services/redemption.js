@@ -192,10 +192,18 @@ class RedemptionService {
       try {
         const spendabilityCheck = await cashuService.checkTokenSpendable(token);
         if (!spendabilityCheck.spendable || spendabilityCheck.spendable.length === 0) {
-          throw new Error('Token proofs are not spendable - may have already been used');
+          throw new Error('Token proofs are not spendable - they have already been used or are invalid');
         }
       } catch (spendError) {
-        // Log but don't fail - some mints might not support this check
+        // Check if the error indicates tokens are already spent (422 status)
+        if (spendError.message.includes('not spendable') || 
+            spendError.message.includes('already been used') ||
+            spendError.message.includes('invalid proofs') ||
+            spendError.message.includes('422')) {
+          // This is likely an already-spent token - fail the redemption with clear message
+          throw new Error('This token has already been spent and cannot be redeemed again');
+        }
+        // Log but don't fail for other errors - some mints might not support this check
         console.warn('Spendability check failed:', spendError.message);
       }
 

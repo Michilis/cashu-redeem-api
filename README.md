@@ -6,7 +6,6 @@ A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses
 
 - **Decode Cashu tokens** - Parse and validate token content
 - **Redeem to Lightning addresses** - Convert ecash to Lightning payments via LNURLp
-- **Real-time status tracking** - Monitor redemption progress with unique IDs
 - **Security features** - Domain restrictions, rate limiting, input validation
 - **Robust error handling** - Comprehensive error messages and status codes
 - **In-memory caching** - Fast mint and wallet instances with connection pooling
@@ -113,8 +112,8 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 - **Fees are subtracted from the token amount before creating the Lightning invoice**
 - `amount`: Original token amount
 - `invoiceAmount`: Actual amount sent to Lightning address (amount - expected fees)
-- `fee`: Actual fee charged by the mint
-- `actualFee`: Calculated expected fee
+- `fee`: Actual fee charged by the mint (from melt response)
+- `actualFee`: Calculated expected fee (for comparison)
 - `netAmount`: Final amount after all deductions
 
 **Payment Verification**: 
@@ -122,8 +121,6 @@ The API uses multiple indicators to verify payment success:
 - `paid` flag from mint response
 - Presence of payment preimage
 - Payment state indicators
-
-If you receive a "payment failed" error but the Lightning payment was successful, use the debug endpoint to investigate the raw mint response.
 
 ### 3. `POST /api/validate-address`
 Validate a Lightning address without redemption.
@@ -147,55 +144,19 @@ Validate a Lightning address without redemption.
 }
 ```
 
-### 4. `POST /api/check-spendable`
-Check if a Cashu token is spendable at its mint before attempting redemption.
+### 4. `GET /api/health`
+Health check endpoint.
 
-**Request:**
+**Response:**
 ```json
 {
-  "token": "cashuAeyJhbGciOi..."
+  "status": "ok",
+  "timestamp": "2025-01-14T12:00:00Z",
+  "uptime": 3600,
+  "memory": {...},
+  "version": "1.0.0"
 }
 ```
-
-**Success Response:**
-```json
-{
-  "success": true,
-  "spendable": [true, true, false],
-  "pending": [],
-  "mintUrl": "https://mint.azzamo.net",
-  "totalAmount": 21000,
-  "spendableCount": 2,
-  "totalProofs": 3,
-  "message": "2 of 3 token proofs are spendable"
-}
-```
-
-**Response (when mint doesn't support spendability checking):**
-```json
-{
-  "success": true,
-  "supported": false,
-  "message": "This mint does not support spendability checking. Token format appears valid.",
-  "error": "This mint does not support spendability checking. Token may still be valid."
-}
-```
-
-**Fallback Response (when spendability check fails but token is valid):**
-```json
-{
-  "success": true,
-  "supported": false,
-  "fallback": true,
-  "mintUrl": "https://21mint.me",
-  "totalAmount": 21000,
-  "totalProofs": 8,
-  "message": "Spendability check failed, but token format is valid. Token may still be usable.",
-  "error": "Failed to check token spendability: [error details]"
-}
-```
-
-**Note**: Some mints may not support spendability checking. In such cases, the endpoint will return `supported: false` with a success status, indicating that while the check couldn't be performed, the token format itself appears valid.
 
 ## 🛠 Setup & Installation
 
@@ -296,10 +257,8 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 - Handles domain restrictions
 
 #### `services/redemption.js`
-- Coordinates the complete redemption process
 - Manages redemption status tracking
 - Handles duplicate token detection
-- Provides cleanup functionality
 
 ### Data Flow
 
@@ -307,7 +266,6 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 2. **Address Resolution** - Resolve Lightning address to LNURLp endpoint
 3. **Invoice Generation** - Create Lightning invoice for the amount
 4. **Token Melting** - Use cashu-ts to melt token and pay invoice
-5. **Status Tracking** - Store and update redemption status with UUID
 
 ## 🔒 Security Features
 
@@ -316,7 +274,6 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 - **Domain restrictions** - Limit allowed Lightning address domains
 - **CORS protection** - Configurable allowed origins
 - **Error handling** - Comprehensive error messages without data leaks
-- **Token deduplication** - Prevent double-spending with hash tracking
 
 ## 🚦 Status Codes
 

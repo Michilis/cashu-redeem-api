@@ -305,9 +305,6 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
  *                 error:
  *                   type: string
  *                   example: "This token has already been spent and cannot be redeemed again"
- *                 redeemId:
- *                   type: string
- *                   format: uuid
  *                 errorType:
  *                   type: string
  *                   example: "token_already_spent"
@@ -324,9 +321,6 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
  *                 error:
  *                   type: string
  *                   example: "Token amount is insufficient to cover the minimum fee"
- *                 redeemId:
- *                   type: string
- *                   format: uuid
  *                 errorType:
  *                   type: string
  *                   example: "insufficient_funds"
@@ -355,7 +349,6 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
     if (result.success) {
       const response = {
         success: true,
-        redeemId: result.redeemId,
         paid: result.paid,
         amount: result.amount,
         invoiceAmount: result.invoiceAmount,
@@ -400,7 +393,6 @@ app.post('/api/redeem', asyncHandler(async (req, res) => {
       res.status(statusCode).json({
         success: false,
         error: result.error,
-        redeemId: result.redeemId,
         errorType: statusCode === 409 ? 'token_already_spent' : 
                    statusCode === 422 ? 'insufficient_funds' : 'validation_error'
       });

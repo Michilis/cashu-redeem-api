@@ -76,7 +76,6 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 ```json
 {
   "success": true,
-  "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
   "invoiceAmount": 20580,
@@ -94,7 +93,6 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 ```json
 {
   "success": true,
-  "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
   "invoiceAmount": 20580,

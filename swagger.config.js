@@ -138,12 +138,6 @@ const options = {
               type: 'boolean',
               example: true
             },
-            redeemId: {
-              type: 'string',
-              format: 'uuid',
-              description: 'Unique redemption ID for tracking',
-              example: '8e99101e-d034-4d2e-9ccf-dfda24d26762'
-            },
             paid: {
               type: 'boolean',
               description: 'Whether the payment was successful',

@@ -1,4 +1,15 @@
+require('dotenv').config();
 const swaggerJsdoc = require('swagger-jsdoc');
+
+// Get the API domain from environment variable, default to localhost:3000
+const apiDomain = process.env.API_DOMAIN || 'localhost:3000';
+const isProduction = process.env.NODE_ENV === 'production';
+const protocol = isProduction ? 'https' : 'http';
+
+// For production behind Nginx, we need to ensure the URL doesn't include the internal port
+const serverUrl = isProduction 
+  ? `${protocol}://${apiDomain}` 
+  : `${protocol}://${apiDomain}`;
 
 const options = {
   definition: {
@@ -18,12 +29,8 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
-        description: 'Development server'
-      },
-      {
-        url: 'https://api.example.com',
-        description: 'Production server'
+        url: serverUrl,
+        description: isProduction ? 'Production server' : 'Development server'
       }
     ],
     components: {
@@ -323,10 +330,6 @@ const options = {
       }
     },
     tags: [
-      {
-        name: 'General',
-        description: 'General API information and utilities'
-      },
       {
         name: 'Token Operations',
         description: 'Operations for decoding and redeeming Cashu tokens'

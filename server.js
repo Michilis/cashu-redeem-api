@@ -10,15 +10,47 @@ const redemptionService = require('./services/redemption');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Get API domain for CORS configuration
+const apiDomain = process.env.API_DOMAIN || 'localhost:3000';
+const isProduction = process.env.NODE_ENV === 'production';
+const protocol = isProduction ? 'https' : 'http';
+
 // Middleware
 app.use(express.json({ limit: '10mb' }));
+
+// Enhanced CORS configuration for Swagger UI
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:3000'],
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+    : [`${protocol}://${apiDomain}`],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
+
+// Additional middleware for Swagger UI preflight requests
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With');
+    res.status(200).end();
+    return;
+  }
+  next();
+});
+
+// Debug endpoint to test CORS
+app.get('/api/cors-test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS test successful',
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin,
+    host: req.headers.host
+  });
+});
 
 // Swagger Documentation
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
@@ -26,7 +58,8 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
   customSiteTitle: 'Cashu Redeem API Documentation',
   swaggerOptions: {
     filter: true,
-    showRequestHeaders: true
+    showRequestHeaders: true,
+    tryItOutEnabled: true
   }
 }));
 
@@ -79,52 +112,6 @@ function asyncHandler(fn) {
 
 // API Routes
 
-/**
- * @swagger
- * /:
- *   get:
- *     summary: API Information
- *     description: Get basic information about the Cashu Redeem API
- *     tags: [General]
- *     responses:
- *       200:
- *         description: API information
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 name:
- *                   type: string
- *                   example: "Cashu Redeem API"
- *                 version:
- *                   type: string
- *                   example: "1.0.0"
- *                 description:
- *                   type: string
- *                   example: "A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses"
- *                 documentation:
- *                   type: string
- *                   example: "/docs"
- *                 endpoints:
- *                   type: object
- *                   properties:
- *                     decode:
- *                       type: string
- *                       example: "POST /api/decode"
- *                     redeem:
- *                       type: string
- *                       example: "POST /api/redeem"
- *                     validate:
- *                       type: string
- *                       example: "POST /api/validate-address"
- *                     health:
- *                       type: string
- *                       example: "GET /api/health"
- *                 github:
- *                   type: string
- *                   example: "https://github.com/yourusername/cashu-redeem-api"
- */
 app.get('/', (req, res) => {
   res.json({
     name: 'Cashu Redeem API',

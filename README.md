@@ -34,7 +34,7 @@ Decode a Cashu token and return its content. Supports both v1 and v3 token forma
 **Request:**
 ```json
 {
-  "token": "cashuAeyJhbGciOi..."
+  "token": "cashuB..."
 }
 ```
 
@@ -47,7 +47,8 @@ Decode a Cashu token and return its content. Supports both v1 and v3 token forma
     "totalAmount": 21000,
     "numProofs": 3,
     "denominations": [1000, 10000, 10000],
-    "format": "cashuA"
+    "format": "cashuA",
+    "spent": false
   },
   "mint_url": "https://mint.azzamo.net"
 }
@@ -59,7 +60,7 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 **Request:**
 ```json
 {
-  "token": "cashuAeyJhbGciOi...",
+  "token": "cashuB...",
   "lightningAddress": "user@ln.tips"
 }
 ```
@@ -67,7 +68,7 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 **Request (using default address):**
 ```json
 {
-  "token": "cashuAeyJhbGciOi..."
+  "token": "cashuB..."
 }
 ```
 
@@ -75,7 +76,6 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 ```json
 {
   "success": true,
-  "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
   "invoiceAmount": 20580,
@@ -93,7 +93,6 @@ Redeem a Cashu token to a Lightning address. Lightning address is optional - if 
 ```json
 {
   "success": true,
-  "redeemId": "8e99101e-d034-4d2e-9ccf-dfda24d26762",
   "paid": true,
   "amount": 21000,
   "invoiceAmount": 20580,

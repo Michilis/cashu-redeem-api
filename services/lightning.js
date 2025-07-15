@@ -1,4 +1,5 @@
 const axios = require('axios');
+const bolt11 = require('bolt11');
 
 class LightningService {
   constructor() {
@@ -220,11 +221,19 @@ class LightningService {
    */
   async resolveInvoice(lightningAddress, amount, comment = 'Cashu token redemption') {
     try {
+      console.log(`Resolving Lightning address: ${lightningAddress} for ${amount} sats`);
+      
       // Get LNURLp endpoint
       const lnurlpUrl = this.getLNURLpEndpoint(lightningAddress);
+      console.log(`LNURLp endpoint: ${lnurlpUrl}`);
       
       // Fetch LNURLp response
       const lnurlpResponse = await this.fetchLNURLpResponse(lnurlpUrl);
+      console.log('LNURLp response:', {
+        callback: lnurlpResponse.callback,
+        minSendable: lnurlpResponse.minSendable,
+        maxSendable: lnurlpResponse.maxSendable
+      });
       
       // Validate amount
       if (!this.validateAmount(amount, lnurlpResponse)) {
@@ -235,7 +244,17 @@ class LightningService {
 
       // Get invoice
       const amountMsats = this.satsToMillisats(amount);
+      console.log(`Requesting invoice for ${amountMsats} millisats (${amount} sats)`);
+      console.log(`Using callback URL: ${lnurlpResponse.callback}`);
       const invoiceResponse = await this.getInvoice(lnurlpResponse.callback, amountMsats, comment);
+      
+      console.log('Invoice created successfully:', {
+        bolt11: invoiceResponse.bolt11.substring(0, 50) + '...',
+        lightningAddress,
+        amount,
+        amountMsats,
+        callback: lnurlpResponse.callback
+      });
 
       return {
         bolt11: invoiceResponse.bolt11,
@@ -247,6 +266,7 @@ class LightningService {
         lnurlpResponse
       };
     } catch (error) {
+      console.error('Lightning address resolution failed:', error.message);
       throw new Error(`Lightning address resolution failed: ${error.message}`);
     }
   }
@@ -269,6 +289,62 @@ class LightningService {
       };
     } catch (error) {
       throw new Error(`Invoice parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify that a Lightning invoice is valid and for the expected amount
+   * @param {string} bolt11Invoice - The Lightning invoice to verify
+   * @param {string} expectedLightningAddress - The expected Lightning address (for logging)
+   * @param {number} expectedAmount - Expected amount in satoshis (optional)
+   * @returns {boolean} Whether the invoice is valid
+   */
+  verifyInvoiceDestination(bolt11Invoice, expectedLightningAddress, expectedAmount = null) {
+    try {
+      console.log(`Verifying invoice destination for: ${expectedLightningAddress}`);
+      console.log(`Invoice: ${bolt11Invoice.substring(0, 50)}...`);
+      
+      // Decode the invoice using the bolt11 library
+      const decoded = bolt11.decode(bolt11Invoice);
+      
+      // Basic validation checks
+      if (!decoded.complete) {
+        console.error('Invoice verification failed: Invoice is incomplete');
+        return false;
+      }
+      
+      if (!decoded.paymentRequest) {
+        console.error('Invoice verification failed: No payment request found');
+        return false;
+      }
+      
+      // Check if the invoice has expired
+      if (decoded.timeExpireDate && decoded.timeExpireDate < Date.now() / 1000) {
+        console.error('Invoice verification failed: Invoice has expired');
+        return false;
+      }
+      
+      // Verify amount if provided
+      if (expectedAmount !== null) {
+        const invoiceAmount = decoded.satoshis || (decoded.millisatoshis ? Math.floor(decoded.millisatoshis / 1000) : 0);
+        if (invoiceAmount !== expectedAmount) {
+          console.error(`Invoice verification failed: Amount mismatch. Expected: ${expectedAmount} sats, Got: ${invoiceAmount} sats`);
+          return false;
+        }
+      }
+      
+      console.log('Invoice verification: All checks passed');
+      console.log('Invoice details:', {
+        amount: decoded.satoshis || (decoded.millisatoshis ? Math.floor(decoded.millisatoshis / 1000) : 0),
+        timestamp: decoded.timestamp,
+        expiry: decoded.expiry,
+        description: decoded.tags?.find(tag => tag.tagName === 'description')?.data || 'No description'
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Invoice verification failed:', error.message);
+      return false;
     }
   }
 }

@@ -167,23 +167,10 @@ class RedemptionService {
       this.updateRedemption(redeemId, { status: 'parsing_token' });
       const tokenData = await cashuService.parseToken(token);
 
-      // Calculate expected fee according to NUT-05
-      const expectedFee = cashuService.calculateFee(tokenData.totalAmount);
-      
-      // Calculate net amount after subtracting fees
-      const netAmountAfterFee = tokenData.totalAmount - expectedFee;
-      
-      // Ensure we have enough for the minimum payment after fees
-      if (netAmountAfterFee <= 0) {
-        throw new Error(`Token amount (${tokenData.totalAmount} sats) is insufficient to cover the minimum fee (${expectedFee} sats)`);
-      }
-
       this.updateRedemption(redeemId, { 
         amount: tokenData.totalAmount,
         mint: tokenData.mint,
         numProofs: tokenData.numProofs,
-        expectedFee: expectedFee,
-        netAmountAfterFee: netAmountAfterFee,
         format: tokenData.format
       });
 
@@ -203,26 +190,58 @@ class RedemptionService {
           // This is likely an already-spent token - fail the redemption with clear message
           throw new Error('This token has already been spent and cannot be redeemed again');
         }
-        // Log but don't fail for other errors - some mints might not support this check
+        // For other errors, log but continue - some mints might not support this check
         console.warn('Spendability check failed:', spendError.message);
+        console.log('Continuing with redemption despite spendability check failure...');
       }
 
-      // Step 2: Resolve Lightning address to invoice
-      // IMPORTANT: Create invoice for net amount (after subtracting expected fees)
+      // Step 2: Get melt quote first to determine exact fees
+      this.updateRedemption(redeemId, { status: 'getting_melt_quote' });
+      
+      // Create a temporary invoice to get the melt quote (we'll create the real one after)
+      console.log(`Getting melt quote for ${tokenData.totalAmount} sats to determine exact fees`);
+      const tempInvoiceData = await lightningService.resolveInvoice(
+        lightningAddressToUse, 
+        tokenData.totalAmount, // Use full amount initially
+        'Cashu redemption'
+      );
+      
+      // Get melt quote to determine exact fee
+      const meltQuote = await cashuService.getMeltQuote(token, tempInvoiceData.bolt11);
+      const exactFee = meltQuote.fee_reserve;
+      const finalInvoiceAmount = tokenData.totalAmount - exactFee;
+      
+      console.log(`Melt quote: amount=${meltQuote.amount}, fee=${exactFee}, net to user=${finalInvoiceAmount}`);
+      
+      // Step 3: Create final invoice for the correct amount (total - exact fee)
       this.updateRedemption(redeemId, { status: 'resolving_invoice' });
+      
+      if (finalInvoiceAmount <= 0) {
+        throw new Error(`Token amount (${tokenData.totalAmount} sats) is insufficient to cover the fee (${exactFee} sats)`);
+      }
+      
+      console.log(`Creating final invoice for ${finalInvoiceAmount} sats (${tokenData.totalAmount} - ${exactFee} fee)`);
+      
       const invoiceData = await lightningService.resolveInvoice(
         lightningAddressToUse, 
-        netAmountAfterFee, // Use net amount instead of full token amount
+        finalInvoiceAmount, // Use amount minus exact fee
         'Cashu redemption'
       );
 
       this.updateRedemption(redeemId, { 
         bolt11: invoiceData.bolt11.substring(0, 50) + '...',
         domain: invoiceData.domain,
-        invoiceAmount: netAmountAfterFee
+        invoiceAmount: finalInvoiceAmount,
+        exactFee: exactFee
       });
 
-      // Step 3: Melt the token to pay the invoice
+      // Verify the invoice is valid and for the correct amount
+      const invoiceVerified = lightningService.verifyInvoiceDestination(invoiceData.bolt11, lightningAddressToUse, finalInvoiceAmount);
+      if (!invoiceVerified) {
+        throw new Error('Invoice verification failed - invalid invoice or amount mismatch');
+      }
+
+      // Step 4: Melt the token to pay the invoice
       this.updateRedemption(redeemId, { status: 'melting_token' });
       const meltResult = await cashuService.meltToken(token, invoiceData.bolt11);
 
@@ -256,12 +275,12 @@ class RedemptionService {
         redeemId,
         paid: paymentSuccessful,
         amount: tokenData.totalAmount,
-        invoiceAmount: netAmountAfterFee, // Amount actually sent in the invoice
+        invoiceAmount: finalInvoiceAmount, // Amount actually sent in the invoice
         to: lightningAddressToUse,
         usingDefaultAddress: isUsingDefault,
-        fee: meltResult.fee,
+        fee: exactFee, // Use the exact fee from the melt quote
         actualFee: meltResult.actualFee,
-        netAmount: meltResult.netAmount,
+        netAmount: finalInvoiceAmount, // This is the net amount the user receives
         preimage: meltResult.preimage,
         change: meltResult.change,
         mint: tokenData.mint,

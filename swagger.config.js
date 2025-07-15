@@ -52,7 +52,7 @@ const options = {
             token: {
               type: 'string',
               description: 'Cashu token to decode (supports v1 and v3 formats)',
-              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
+              example: 'cashuB...'
             }
           }
         },
@@ -95,6 +95,11 @@ const options = {
                   enum: ['cashuA', 'cashuB'],
                   description: 'Token format version',
                   example: 'cashuA'
+                },
+                spent: {
+                  type: 'boolean',
+                  description: 'Whether the token has already been spent (true = spent, false = still valid)',
+                  example: false
                 }
               }
             },
@@ -115,13 +120,13 @@ const options = {
             token: {
               type: 'string',
               description: 'Cashu token to redeem',
-              example: 'cashuAeyJwcm9vZnMiOlt7ImFtb3VudCI6MSwiaWQiOiIwMGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn0seyJhbW91bnQiOjEsImlkIjoiMDBmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmIn1dLCJtaW50IjoiaHR0cHM6Ly9taW50LmV4YW1wbGUuY29tIn0'
+              example: 'cashuB...'
             },
             lightningAddress: {
               type: 'string',
               format: 'email',
               description: 'Lightning address to send payment to (optional - uses default if not provided)',
-              example: 'user@ln.tips'
+              example: 'user@blink.sv'
             }
           }
         },
@@ -324,6 +329,10 @@ const options = {
       }
     },
     tags: [
+      {
+        name: 'General',
+        description: 'General API information and utilities'
+      },
       {
         name: 'Token Operations',
         description: 'Operations for decoding and redeeming Cashu tokens'

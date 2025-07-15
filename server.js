@@ -81,6 +81,78 @@ function asyncHandler(fn) {
 
 /**
  * @swagger
+ * /:
+ *   get:
+ *     summary: API Information
+ *     description: Get basic information about the Cashu Redeem API
+ *     tags: [General]
+ *     responses:
+ *       200:
+ *         description: API information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 name:
+ *                   type: string
+ *                   example: "Cashu Redeem API"
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ *                 description:
+ *                   type: string
+ *                   example: "A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses"
+ *                 documentation:
+ *                   type: string
+ *                   example: "/docs"
+ *                 endpoints:
+ *                   type: object
+ *                   properties:
+ *                     decode:
+ *                       type: string
+ *                       example: "POST /api/decode"
+ *                     redeem:
+ *                       type: string
+ *                       example: "POST /api/redeem"
+ *                     validate:
+ *                       type: string
+ *                       example: "POST /api/validate-address"
+ *                     health:
+ *                       type: string
+ *                       example: "GET /api/health"
+ *                 github:
+ *                   type: string
+ *                   example: "https://github.com/yourusername/cashu-redeem-api"
+ */
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Cashu Redeem API',
+    version: '1.0.0',
+    description: 'A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses using the cashu-ts library and LNURLp protocol',
+    documentation: '/docs',
+    endpoints: {
+      decode: 'POST /api/decode',
+      redeem: 'POST /api/redeem',
+      validate: 'POST /api/validate-address',
+      health: 'GET /api/health'
+    },
+    features: [
+      'Decode Cashu tokens',
+      'Redeem tokens to Lightning addresses',
+      'Lightning address validation',
+      'Domain restrictions',
+      'Rate limiting',
+      'Comprehensive error handling'
+    ],
+    github: 'https://github.com/yourusername/cashu-redeem-api'
+  });
+});
+
+// API Routes
+
+/**
+ * @swagger
  * /api/decode:
  *   post:
  *     summary: Decode a Cashu token
@@ -128,6 +200,44 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
     const decoded = await cashuService.parseToken(token);
     const mintUrl = await cashuService.getTokenMintUrl(token);
     
+    // Check if token is spent
+    let spent = false;
+    try {
+      const spendabilityCheck = await cashuService.checkTokenSpendable(token);
+      // Token is spent if no proofs are spendable
+      spent = !spendabilityCheck.spendable || spendabilityCheck.spendable.length === 0;
+    } catch (error) {
+      // If spendability check fails, analyze the error to determine if token is spent
+      console.warn('Spendability check failed:', error.message);
+      
+      // Check if error indicates proofs are already spent
+      const errorString = error.message || error.toString();
+      
+      // Check for specific error indicators
+      if (errorString.includes('TOKEN_SPENT:')) {
+        // CashuService has determined the token is spent based on clear indicators
+        console.log('Token determined to be spent by CashuService');
+        spent = true;
+      } else if (errorString.includes('Token validation failed at mint:')) {
+        // This is a 422 error but not clearly indicating the token is spent
+        // It might be invalid/malformed but not necessarily spent
+        console.log('Token validation failed at mint - assuming token is still valid (might be invalid format)');
+        spent = false;
+      } else if (errorString.includes('not supported') ||
+                 errorString.includes('endpoint not found') ||
+                 errorString.includes('may still be valid') ||
+                 errorString.includes('does not support spendability checking')) {
+        // Mint doesn't support spendability checking - assume token is still valid
+        console.log('Mint does not support spendability checking - assuming token is valid');
+        spent = false;
+      } else {
+        // For other errors (network, server issues), assume token is still valid
+        // This is safer than assuming it's spent
+        console.log('Unknown error - assuming token is valid');
+        spent = false;
+      }
+    }
+    
     res.json({
       success: true,
       decoded: {
@@ -135,7 +245,8 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
         totalAmount: decoded.totalAmount,
         numProofs: decoded.numProofs,
         denominations: decoded.denominations,
-        format: decoded.format
+        format: decoded.format,
+        spent: spent
       },
       mint_url: mintUrl
     });
@@ -157,13 +268,14 @@ app.post('/api/decode', asyncHandler(async (req, res) => {
  *       
  *       The redemption process includes:
  *       1. Token validation and parsing
- *       2. Fee calculation (NUT-05: 2% of amount, minimum 1 satoshi)
- *       3. Invoice creation for net amount (token amount - fees)
+ *       2. Getting exact melt quote from mint to determine precise fees
+ *       3. Invoice creation for net amount (token amount - exact fees)
  *       4. Spendability checking at the mint
  *       5. Token melting and Lightning payment
  *       
- *       **Important**: Fees are subtracted from the token amount before creating the Lightning invoice.
+ *       **Important**: The system gets the exact fee from the mint before creating the invoice.
  *       The `invoiceAmount` field shows the actual amount sent to the Lightning address.
+ *       No sats are lost to fee estimation errors.
  *     tags: [Token Operations]
  *     requestBody:
  *       required: true

@@ -185,6 +185,36 @@ class CashuService {
   }
 
   /**
+   * Get melt quote for a Cashu token and Lightning invoice
+   * @param {string} token - The encoded Cashu token
+   * @param {string} bolt11 - The Lightning invoice
+   * @returns {Object} Melt quote
+   */
+  async getMeltQuote(token, bolt11) {
+    try {
+      const parsed = await this.parseToken(token);
+      const wallet = await this.getWallet(parsed.mint);
+
+      // Create melt quote to get fee estimate
+      const meltQuote = await wallet.createMeltQuote(bolt11);
+      
+      console.log('Melt quote created:', {
+        amount: meltQuote.amount,
+        fee_reserve: meltQuote.fee_reserve,
+        quote: meltQuote.quote
+      });
+      
+      return {
+        amount: meltQuote.amount,
+        fee_reserve: meltQuote.fee_reserve,
+        quote: meltQuote.quote
+      };
+    } catch (error) {
+      throw new Error(`Failed to get melt quote: ${error.message}`);
+    }
+  }
+
+  /**
    * Melt a Cashu token to pay a Lightning invoice
    * @param {string} token - The encoded Cashu token
    * @param {string} bolt11 - The Lightning invoice
@@ -199,20 +229,36 @@ class CashuService {
       const decoded = await this.decodeTokenStructure(token);
       const proofs = decoded.proofs;
 
-      // Create melt quote to get fee estimate
+      // Step 1: Create melt quote to get fee estimate
       const meltQuote = await wallet.createMeltQuote(bolt11);
+      console.log('Melt quote created:', {
+        amount: meltQuote.amount,
+        fee_reserve: meltQuote.fee_reserve,
+        quote: meltQuote.quote
+      });
+      console.log('Paying invoice:', bolt11.substring(0, 50) + '...');
+      console.log('Full invoice being paid:', bolt11);
       
-      // Calculate expected fee
-      const expectedFee = this.calculateFee(parsed.totalAmount);
+      // Step 2: Calculate total required (amount + fee_reserve)
+      const total = meltQuote.amount + meltQuote.fee_reserve;
+      console.log('Total required:', total, 'sats (amount:', meltQuote.amount, '+ fee:', meltQuote.fee_reserve, ')');
+      console.log('Available in token:', parsed.totalAmount, 'sats');
       
-      // Check if we have sufficient funds including fees
-      const totalRequired = meltQuote.amount + meltQuote.fee_reserve;
-      if (totalRequired > parsed.totalAmount) {
-        throw new Error(`Insufficient funds. Required: ${totalRequired} sats (including ${meltQuote.fee_reserve} sats fee), Available: ${parsed.totalAmount} sats`);
+      // Check if we have sufficient funds
+      if (total > parsed.totalAmount) {
+        throw new Error(`Insufficient funds. Required: ${total} sats (including ${meltQuote.fee_reserve} sats fee), Available: ${parsed.totalAmount} sats`);
       }
 
-      // Perform the melt operation using the quote and proofs
-      const meltResponse = await wallet.meltTokens(meltQuote, proofs);
+      // Step 3: Send tokens with includeFees: true to get the right proofs
+      console.log('Selecting proofs with includeFees: true for', total, 'sats');
+      const { send: proofsToSend } = await wallet.send(total, proofs, {
+        includeFees: true,
+      });
+      console.log('Selected', proofsToSend.length, 'proofs for melting');
+
+      // Step 4: Perform the melt operation using the quote and selected proofs
+      console.log('Performing melt operation...');
+      const meltResponse = await wallet.meltTokens(meltQuote, proofsToSend);
 
       // Debug: Log the melt response structure
       console.log('Melt response:', JSON.stringify(meltResponse, null, 2));
@@ -245,7 +291,6 @@ class CashuService {
         change: meltResponse.change || [],
         amount: meltQuote.amount,
         fee: actualFeeCharged, // Use actual fee from melt response
-        actualFee: expectedFee, // Keep the calculated expected fee for comparison
         netAmount: actualNetAmount, // Use net amount based on actual fee
         quote: meltQuote.quote,
         rawMeltResponse: meltResponse // Include raw response for debugging
@@ -330,43 +375,44 @@ class CashuService {
         totalAmount: parsed.totalAmount
       };
     } catch (error) {
-      // Check if it's a known 422 error (already spent token) - log less verbosely
-      const isExpected422Error = (error.status === 422 || error.response?.status === 422) && 
-                                 error.constructor.name === 'HttpResponseError';
-      
-      if (isExpected422Error) {
-        console.log('Token spendability check: 422 status detected - token already spent');
-      } else {
-        // Enhanced error logging for unexpected errors
-        console.error('Spendability check error details:', {
-          errorType: error.constructor.name,
-          errorMessage: error.message,
-          errorCode: error.code,
-          errorStatus: error.status,
-          errorResponse: error.response,
-          errorData: error.data,
-          errorStack: error.stack,
-          errorString: String(error)
-        });
-      }
+      // Enhanced error logging for debugging
+      console.error('Spendability check error details:', {
+        errorType: error.constructor.name,
+        errorMessage: error.message,
+        errorCode: error.code,
+        errorStatus: error.status,
+        errorResponse: error.response,
+        errorData: error.data,
+        errorStack: error.stack,
+        errorString: String(error)
+      });
       
       // Handle different types of errors
       let errorMessage = 'Unknown error occurred';
       
       // Handle cashu-ts HttpResponseError specifically
       if (error.constructor.name === 'HttpResponseError') {
-        if (!isExpected422Error) {
-          console.log('HttpResponseError detected, extracting details...');
-        }
-        
         // Extract status code first
         const status = error.status || error.response?.status || error.statusCode;
         
-        // For 422 errors, we know it's about already spent tokens
+        // For 422 errors, we need to be more specific about the reason
         if (status === 422) {
-          errorMessage = 'Token proofs are not spendable - they have already been used or are invalid';
-          if (!isExpected422Error) {
-            console.log('Detected 422 status - token already spent');
+          // Try to get more details about the 422 error
+          let responseBody = null;
+          try {
+            responseBody = error.response?.data || error.data || error.body;
+            console.log('HTTP 422 response body:', responseBody);
+          } catch (e) {
+            console.log('Could not extract response body');
+          }
+          
+          // 422 can mean different things, let's be more specific
+          if (responseBody && typeof responseBody === 'object' && responseBody.detail) {
+            errorMessage = `Token validation failed: ${responseBody.detail}`;
+            console.log('422 error with detail:', responseBody.detail);
+          } else {
+            errorMessage = 'Token proofs are not spendable - they may have already been used or are invalid';
+            console.log('Detected 422 status - token validation failed');
           }
         } else {
           // Try to extract useful information from the HTTP response error
@@ -432,9 +478,7 @@ class CashuService {
       }
       
       // Log the final extracted error message for debugging
-      if (!isExpected422Error) {
-        console.log('Final extracted error message:', errorMessage);
-      }
+      console.log('Final extracted error message:', errorMessage);
       
       // Check if it's a known error pattern indicating unsupported operation
       if (errorMessage.includes('not supported') || 
@@ -446,6 +490,26 @@ class CashuService {
           errorMessage.includes('not implemented') ||
           errorMessage.includes('Invalid response from mint')) {
         throw new Error('This mint does not support spendability checking. Token may still be valid.');
+      }
+      
+      // Check if the error indicates the token is spent (HTTP 422 or specific messages)
+      const status = error.status || error.response?.status || error.statusCode;
+      if (status === 422) {
+        // For 422 errors, we need to be more careful about determining if it's "spent" vs "invalid"
+        // Only mark as spent if we have clear indicators
+        if (errorMessage.includes('already been used') || 
+            errorMessage.includes('already spent') ||
+            errorMessage.includes('not spendable')) {
+          throw new Error('TOKEN_SPENT: Token proofs are not spendable - they have already been used');
+        } else {
+          // For other 422 errors, it might be invalid but not necessarily spent
+          console.log('HTTP 422 but not clearly indicating spent token - treating as validation error');
+          throw new Error(`Token validation failed at mint: ${errorMessage}`);
+        }
+      } else if (errorMessage.includes('Token proofs are not spendable') ||
+                 errorMessage.includes('already been used') ||
+                 errorMessage.includes('invalid proofs')) {
+        throw new Error('TOKEN_SPENT: Token proofs are not spendable - they have already been used');
       }
       
       throw new Error(`Failed to check token spendability: ${errorMessage}`);

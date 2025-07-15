@@ -112,52 +112,6 @@ function asyncHandler(fn) {
 
 // API Routes
 
-/**
- * @swagger
- * /:
- *   get:
- *     summary: API Information
- *     description: Get basic information about the Cashu Redeem API
- *     tags: [General]
- *     responses:
- *       200:
- *         description: API information
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 name:
- *                   type: string
- *                   example: "Cashu Redeem API"
- *                 version:
- *                   type: string
- *                   example: "1.0.0"
- *                 description:
- *                   type: string
- *                   example: "A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses"
- *                 documentation:
- *                   type: string
- *                   example: "/docs"
- *                 endpoints:
- *                   type: object
- *                   properties:
- *                     decode:
- *                       type: string
- *                       example: "POST /api/decode"
- *                     redeem:
- *                       type: string
- *                       example: "POST /api/redeem"
- *                     validate:
- *                       type: string
- *                       example: "POST /api/validate-address"
- *                     health:
- *                       type: string
- *                       example: "GET /api/health"
- *                 github:
- *                   type: string
- *                   example: "https://github.com/yourusername/cashu-redeem-api"
- */
 app.get('/', (req, res) => {
   res.json({
     name: 'Cashu Redeem API',

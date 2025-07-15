@@ -331,10 +331,6 @@ const options = {
     },
     tags: [
       {
-        name: 'General',
-        description: 'General API information and utilities'
-      },
-      {
         name: 'Token Operations',
         description: 'Operations for decoding and redeeming Cashu tokens'
       },

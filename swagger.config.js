@@ -1,4 +1,10 @@
+require('dotenv').config();
 const swaggerJsdoc = require('swagger-jsdoc');
+
+// Get the API domain from environment variable, default to localhost:3000
+const apiDomain = process.env.API_DOMAIN || 'localhost:3000';
+const isProduction = process.env.NODE_ENV === 'production';
+const protocol = isProduction ? 'https' : 'http';
 
 const options = {
   definition: {
@@ -18,12 +24,8 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
-        description: 'Development server'
-      },
-      {
-        url: 'https://api.example.com',
-        description: 'Production server'
+        url: `${protocol}://${apiDomain}`,
+        description: isProduction ? 'Production server' : 'Development server'
       }
     ],
     components: {

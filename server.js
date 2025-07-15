@@ -10,12 +10,17 @@ const redemptionService = require('./services/redemption');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Get API domain for CORS configuration
+const apiDomain = process.env.API_DOMAIN || 'localhost:3000';
+const isProduction = process.env.NODE_ENV === 'production';
+const protocol = isProduction ? 'https' : 'http';
+
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-    : ['http://localhost:3000'],
+    : [`${protocol}://${apiDomain}`],
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));

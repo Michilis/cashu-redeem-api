@@ -176,6 +176,9 @@ Edit `.env` file:
 PORT=3000
 NODE_ENV=development
 
+# API Domain/IP Configuration (for Swagger docs and CORS)
+API_DOMAIN=localhost:3000
+
 # Security Configuration
 ALLOW_REDEEM_DOMAINS=ln.tips,getalby.com,wallet.mutinywallet.com
 API_SECRET=your-secret-key-here
@@ -198,6 +201,34 @@ npm run dev
 # Production
 npm start
 ```
+
+### Environment Variables
+
+#### API_DOMAIN Configuration
+The `API_DOMAIN` environment variable is used to configure the correct domain/IP for your API in production. This affects:
+
+- **Swagger Documentation**: The "Try it out" feature will use the correct server URL
+- **CORS Configuration**: Default CORS origins will use the correct protocol and domain
+- **API Documentation**: Server URLs in the documentation will be accurate
+
+**Examples:**
+```bash
+# Development
+API_DOMAIN=localhost:3000
+
+# Production with domain
+API_DOMAIN=api.yourdomain.com
+
+# Production with IP
+API_DOMAIN=192.168.1.100:3000
+
+# Production with custom port
+API_DOMAIN=yourdomain.com:8080
+```
+
+**Note**: The protocol (http/https) is automatically determined based on `NODE_ENV`:
+- `NODE_ENV=development` → `http://`
+- `NODE_ENV=production` → `https://`
 
 The API will be available at `http://localhost:3000`
 

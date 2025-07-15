@@ -6,6 +6,11 @@ const apiDomain = process.env.API_DOMAIN || 'localhost:3000';
 const isProduction = process.env.NODE_ENV === 'production';
 const protocol = isProduction ? 'https' : 'http';
 
+// For production behind Nginx, we need to ensure the URL doesn't include the internal port
+const serverUrl = isProduction 
+  ? `${protocol}://${apiDomain}` 
+  : `${protocol}://${apiDomain}`;
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -24,7 +29,7 @@ const options = {
     },
     servers: [
       {
-        url: `${protocol}://${apiDomain}`,
+        url: serverUrl,
         description: isProduction ? 'Production server' : 'Development server'
       }
     ],

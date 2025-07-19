@@ -225,25 +225,6 @@ DEFAULT_LIGHTNING_ADDRESS=admin@your-domain.com
 
 This allows users to redeem tokens without specifying a Lightning address - the tokens will automatically be sent to your configured default address. If no default is set, Lightning address becomes required for all redemption requests.
 
-## 🏗 Architecture
-
-### Services
-
-#### `services/cashu.js`
-- Manages Cashu token parsing and validation
-- Handles mint connections and wallet instances
-- Performs token melting operations
-- Caches mint/wallet connections for performance
-
-#### `services/lightning.js`
-- Validates Lightning address formats
-- Resolves LNURLp endpoints
-- Generates Lightning invoices
-- Handles domain restrictions
-
-#### `services/redemption.js`
-- Manages redemption status tracking
-- Handles duplicate token detection
 
 ### Data Flow
 

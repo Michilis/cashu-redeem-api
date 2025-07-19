@@ -1,6 +1,6 @@
 # Cashu Redeem API 🪙⚡
 
-A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses using the cashu-ts library and LNURLp protocol.
+API for redeeming Cashu tokens (ecash) to Lightning addresses using the cashu-ts library and LNURLp protocol.
 
 ## 🚀 Features
 
@@ -8,7 +8,6 @@ A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses
 - **Redeem to Lightning addresses** - Convert ecash to Lightning payments via LNURLp
 - **Security features** - Domain restrictions, rate limiting, input validation
 - **Robust error handling** - Comprehensive error messages
-- **In-memory caching** - Fast mint and wallet instances with connection pooling
 - **Interactive API Documentation** - Complete Swagger/OpenAPI documentation at `/docs`
 
 
@@ -17,14 +16,6 @@ A production-grade API for redeeming Cashu tokens (ecash) to Lightning addresses
 **Interactive Swagger Documentation**: Visit `/docs` when running the server for a complete, interactive API reference.
 
 Example: `https://cashu-redeem.azzamo.net/docs/`
-
-The documentation includes:
-- Complete endpoint specifications
-- Request/response schemas
-- Try-it-out functionality
-- Example requests and responses
-- Authentication requirements
-- Error code documentation
 
 ## 📡 API Endpoints
 
@@ -202,35 +193,6 @@ npm run dev
 npm start
 ```
 
-### Environment Variables
-
-#### API_DOMAIN Configuration
-The `API_DOMAIN` environment variable is used to configure the correct domain/IP for your API in production. This affects:
-
-- **Swagger Documentation**: The "Try it out" feature will use the correct server URL
-- **CORS Configuration**: Default CORS origins will use the correct protocol and domain
-- **API Documentation**: Server URLs in the documentation will be accurate
-
-**Examples:**
-```bash
-# Development
-API_DOMAIN=localhost:3000
-
-# Production with domain
-API_DOMAIN=api.yourdomain.com
-
-# Production with IP
-API_DOMAIN=192.168.1.100:3000
-
-# Production with custom port
-API_DOMAIN=yourdomain.com:8080
-```
-
-**Note**: The protocol (http/https) is automatically determined based on `NODE_ENV`:
-- `NODE_ENV=development` → `http://`
-- `NODE_ENV=production` → `https://`
-
-The API will be available at `http://localhost:3000`
 
 ## 🔧 Configuration
 
@@ -309,16 +271,6 @@ This allows users to redeem tokens without specifying a Lightning address - the 
 | `paid` | Successfully paid and completed |
 | `failed` | Redemption failed (see error details) |
 
-## 📊 Monitoring
-
-### Health Check
-
-```bash
-curl http://localhost:3000/api/health
-```
-
-### Logs
-The server logs all requests and errors to console. In production, consider using a proper logging solution like Winston.
 
 ## 🧪 Testing
 
@@ -330,45 +282,6 @@ The easiest way to test the API is using the interactive Swagger documentation a
 - Fill in the request parameters
 - Execute the request directly from the browser
 
-### Example cURL commands
-
-**Decode a token:**
-```bash
-curl -X POST http://localhost:3000/api/decode \
-  -H "Content-Type: application/json" \
-  -d '{"token":"your-cashu-token-here"}'
-```
-
-**Redeem a token to specific address:**
-```bash
-curl -X POST http://localhost:3000/api/redeem \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "your-cashu-token-here",
-    "lightningAddress": "user@ln.tips"
-  }'
-```
-
-**Redeem a token to default address:**
-```bash
-curl -X POST http://localhost:3000/api/redeem \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "your-cashu-token-here"
-  }'
-```
-
-## 🚀 Production Deployment
-
-### Recommendations
-
-1. **Use a process manager** (PM2, systemd)
-2. **Set up reverse proxy** (nginx, Apache)
-3. **Enable HTTPS** with SSL certificates
-4. **Use Redis** for persistent storage instead of in-memory
-5. **Set up monitoring** (Prometheus, Grafana)
-6. **Configure logging** (Winston, structured logs)
-7. **Set resource limits** and health checks
 
 
 ## 🤝 Contributing
